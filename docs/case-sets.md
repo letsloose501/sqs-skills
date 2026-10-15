@@ -96,6 +96,32 @@ The fourth row - *broken skill* proved by behaviour rather than by reading - is 
 fine; it is the wrong skill for what you wrote beside it, and a report that graded that
 as a fault would be teaching you to ignore it.
 
+## Steps nobody checks
+
+One more source sits in the body itself: numbered steps. A skill that says *check
+`payables.csv` for the invoice number, then append the row* has a procedure, and a set
+that grades only the row passes a run that appends first and never checks. `CS004`
+reports a body with three or more numbered steps, a runtime set beside it, and no case in
+that set carrying [`process`](evaluation.md#process-how-the-run-got-there). It is `info`:
+a numbered list of options reads exactly like a list of steps, and two numbered lines are
+not counted at all.
+
+`--generate` drafts the missing case: one `order` item, one matcher per step, each a
+`TODO` with the step's text and any code span in it as a hint. For the scripted
+`ledger-lite`:
+
+```json
+"process": [{"id": "steps-in-order", "order": [
+  "TODO: step 1 - Read the amount, the date and the counterparty off whatever ",
+  "TODO: step 2 - Append one row to ledger.csv in that order. Stop when the ro (hint: ledger.csv)",
+  "TODO: step 3 - Print the new balance, with the currency, on its own line."]}]
+```
+
+The pre-flight refuses it until each one names the tool call that shows the step
+happened. That call is the author's knowledge, not the text's: step 3 above leaves no
+call at all and belongs in `assertions`, so it is deleted from the item rather than
+guessed at.
+
 ## The draft is a draft
 
 ```
@@ -215,4 +241,4 @@ claim that nobody mentioned it.
 
 - [Evaluation](evaluation.md) - running the set this page drafts
 - [Publishing](publishing.md) - `--since`, shared with the version rules
-- [Quality rules](quality-rules.md) - `CS001`, `CS002`, `CS003` in the registry
+- [Quality rules](quality-rules.md) - `CS001` to `CS004` in the registry

@@ -74,9 +74,19 @@ class Side:
         return grade.passed and (self.skill_name is None
                                  or providers.loaded(run, self.skill_name))
 
+    def credited_process(self, run, grade):
+        """The same gate on the other half: a procedure the model followed with the skill
+        unread is the model's habit, not the skill's instruction."""
+        return grade.process_passed and (self.skill_name is None
+                                         or providers.loaded(run, self.skill_name))
+
     def metrics(self):
         usable = self.usable
         graded = [(t, r, g) for t, r, g in usable if g.graded]
+        # process numbers are over the runs whose case carries `process` - a set where
+        # half the cases say nothing about procedure must not read as half followed
+        proc = [(t, r, g) for t, r, g in usable if g.process_graded]
+        both = [(t, r, g) for t, r, g in proc if g.graded]
         gated = self.skill_name is not None
         m = {
             "runs": len(self.runs),
@@ -86,6 +96,18 @@ class Side:
             "ungraded_runs": len(usable) - len(graded),
             "success_rate": (sum(1 for _, r, g in graded if self.credited(r, g)) / len(graded)
                              if graded else None),
+            # strict: every process item met. The paper's strict score is a product of
+            # item passes, and this is the same number - 1 only if all of them held.
+            "process_rate": (sum(1 for _, r, g in proc if self.credited_process(r, g))
+                             / len(proc) if proc else None),
+            # loose: the mean share of items met. Descriptive, like `tool_calls`, and not
+            # gated on the skill loading - it says how far the run got, not whose it was.
+            "process_item_rate": mean([g.process_share for _, _, g in proc]),
+            # strict on both halves at once: the result is right and the way there was
+            "strict_rate": (sum(1 for _, r, g in both
+                                if self.credited(r, g) and self.credited_process(r, g))
+                            / len(both) if both else None),
+            "process_graded_runs": len(proc),
             "skill_loaded_runs": (sum(1 for _, r, _ in usable
                                       if providers.loaded(r, self.skill_name))
                                   if gated else None),
@@ -106,12 +128,17 @@ class Side:
     def per_task(self):
         out = {}
         for t, r, g in self.runs:
-            row = out.setdefault(t.id, {"runs": 0, "ok": 0, "passed": 0, "graded": g.graded})
+            row = out.setdefault(t.id, {"runs": 0, "ok": 0, "passed": 0, "graded": g.graded,
+                                        "process_passed": 0})
             row["runs"] += 1
             row["ok"] += int(r.ok)
             row["passed"] += int(self.credited(r, g))
-        for row in out.values():
+            row["process_passed"] += int(r.ok and self.credited_process(r, g))
+        for t_id, row in out.items():
             row["success_rate"] = (row["passed"] / row["ok"]) if row["ok"] else None
+            has_process = any(t.id == t_id and t.process_items for t, _, _ in self.runs)
+            row["process_rate"] = ((row["process_passed"] / row["ok"])
+                                   if row["ok"] and has_process else None)
         return out
 
 
@@ -190,8 +217,8 @@ def evaluate(skill, provider, runs=1, model=None, with_baseline=True, task_filte
         return None, (f"{len(unrunnable)} case(s) cannot run as written, nothing was "
                       f"spent - {head}{more}")
     if len({i for i, kind, _ in blocked if kind == "ungraded"}) == len(task_list):
-        return None, ("no case carries `assertions`, `outputs` or `judge`, so no run could "
-                      "pass or fail - nothing was spent")
+        return None, ("no case carries `assertions`, `outputs`, `judge` or `process`, so no "
+                      "run could pass or fail - nothing was spent")
     # A judge is a program from the skill, run on this machine after every run; reading a
     # skill is not a reason to execute one - the rule `EV006` applies to a tree's runner.
     judged = [t.id for t in task_list if t.judge is not None]
@@ -225,16 +252,19 @@ def evaluate(skill, provider, runs=1, model=None, with_baseline=True, task_filte
         "runs_per_task": runs,
         "isolated": provider.isolates_skills,
         "tasks": [t.id for t in task_list],
-        "ungraded_tasks": [t.id for t in task_list if not t.graded],
+        "ungraded_tasks": [t.id for t in task_list if not t.graded and not t.process_items],
         "sides": {name: side.metrics() for name, side in sides.items()},
         "per_task": {name: side.per_task() for name, side in sides.items()},
         "failures": [
             {"side": name, "task": t.id, "error": r.error,
              # the reason travels with the check: "file:x.csv 12.40" alone does not say
              # whether the file was missing, unreadable, or there with the wrong rows
-             "failed_checks": [f"{w} ({d})" if d else w for w, ok, d in g.checks if not ok]}
+             "failed_checks": ([f"{w} ({d})" if d else w for w, ok, d in g.checks if not ok]
+                               + [f"step:{i} ({d})" if d else f"step:{i}"
+                                  for i, ok, d in g.process if not ok])}
             for name, side in sides.items() for t, r, g in side.runs
             if not r.ok or (g.graded and not g.passed)
+            or (g.process_graded and not g.process_passed)
         ],
     }
     return report, ""
@@ -244,6 +274,9 @@ def evaluate(skill, provider, runs=1, model=None, with_baseline=True, task_filte
 
 ROWS = [
     ("success_rate", "task success", "pct"),
+    ("process_rate", "process followed", "pct"),
+    ("process_item_rate", "process items met", "pct"),
+    ("strict_rate", "strict (both)", "pct"),
     ("skill_loaded_runs", "runs that loaded it", "int"),
     ("failure_rate", "runs that failed", "pct"),
     ("tool_calls", "tool calls", "num"),
@@ -255,6 +288,7 @@ ROWS = [
     ("forbidden_tool_uses", "forbidden tools used", "int"),
     ("safety_violations", "safety violations", "int"),
 ]
+OPTIONAL_ROWS = {"process_rate", "process_item_rate", "strict_rate"}
 
 
 def fmt(value, kind):
@@ -288,6 +322,10 @@ def render(report):
         head += f"{'baseline':>12}{'delta':>12}"
     lines += [head, "  " + "-" * (24 + 12 * (3 if have_baseline else 1))]
     for key, label, kind in ROWS:
+        # three rows of `n/a` on every set written before `process` existed would read
+        # as something measured and missing; with no case carrying it, they are left out
+        if key in OPTIONAL_ROWS and all(s.get(key) is None for s in sides.values()):
+            continue
         t = sides["treatment"].get(key)
         row = f"  {label:<24}{fmt(t, kind):>12}"
         if have_baseline:

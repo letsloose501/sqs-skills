@@ -1,0 +1,7 @@
+{
+  "note": "The silent side of CS004. `invoice-filer` is the same skill as in `process-unchecked`, and its set now carries `process` - the duplicate check before the append, and one row only - so nothing is left unchecked. `receipt-pair` numbers two lines, which is under the three a procedure needs: two numbered lines are as often a pair of outcomes as a pair of steps.",
+  "command": "cases",
+  "reject": [
+    "CS004"
+  ]
+}

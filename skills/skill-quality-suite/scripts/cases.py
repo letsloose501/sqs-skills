@@ -49,6 +49,7 @@ prose-to-claims layer that would need a model stays opt-in and outside `check`.
 **Not a score.** "78% honest" is unactionable and is the one-number headline this
 project already rejected. The rules report what disagrees and stop.
 """
+import json
 import os
 import re
 
@@ -229,6 +230,64 @@ def unserved(skill):
     return out
 
 
+NUMBERED_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<n>\d+)[.)][ \t]+(?P<text>\S.*)$")
+# The fewest steps that make a procedure rather than a pair of alternatives.
+MIN_STEPS = 3
+CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
+
+
+def procedure(skill):
+    """The longest run of numbered steps in the body, `1.` upward, as their texts.
+
+    Read off the raw body, not `instructions()`: that view strips code, and a step whose
+    whole point is "run `scripts/plot.py`" would lose the one span that says how to see
+    it in a transcript. A run ends at the first line that is neither the next number,
+    blank, nor indented under the item before it; renumbering from 1 starts a new run.
+
+    What this cannot tell apart is a numbered list of *options* from a list of *steps* -
+    "1. a CSV 2. a JSON file 3. a table" is the same shape. That is why `CS004` is info.
+    """
+    best, run, last = [], [], 0
+    for line in (skill.body or "").split("\n"):
+        m = NUMBERED_RE.match(line)
+        if m and not m.group("indent"):
+            n = int(m.group("n"))
+            if n == 1:
+                run, last = [m.group("text").strip()], 1
+            elif run and n == last + 1:
+                run.append(m.group("text").strip())
+                last = n
+            else:
+                run, last = [], 0
+        elif run and (not line.strip() or line[:1] in (" ", "\t")):
+            continue
+        else:
+            run, last = [], 0
+        if len(run) > len(best):
+            best = list(run)
+    return best if len(best) >= MIN_STEPS else []
+
+
+def unchecked_procedure(skill):
+    """The procedure, when the skill has a runtime set and no case checks its steps."""
+    steps = procedure(skill)
+    if not steps:
+        return []
+    path = os.path.join(skill.root, CASES_FILE.replace("/", os.sep))
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        # no set, or one that does not parse - `EV002`/`EV004` speak to those, and a
+        # skill nobody evaluates at all is not missing *process* checks in particular
+        return []
+    raw = data.get("evals") if isinstance(data, dict) else data
+    if not isinstance(raw, list) or any(isinstance(c, dict) and c.get("process")
+                                        for c in raw):
+        return []
+    return steps
+
+
 def unannounced(skill, cfg=None):
     """(code, how many scripts carry it) for capabilities the skill never mentions.
 
@@ -299,6 +358,17 @@ def check(skill, cfg=None, registry=None):
                                     + (f" ({len(found)} script(s): {where})"
                                        if len(found) > 1 else ""),
                            where=found[0].where, line=found[0].line))
+
+    # CS004 - the body prescribes numbered steps, a runtime set exists, and no case in
+    # it says anything about whether the steps were followed. Every case grades the
+    # answer; none grades the way there. SkillForgeBench's strict process scores are
+    # where agent reliability fell apart, and a set like this cannot see that happen.
+    steps = unchecked_procedure(skill)
+    if steps:
+        out.append(Finding("CS004", f"the body numbers {len(steps)} steps and no case in "
+                                    f"{CASES_FILE} carries `process`, so a run that "
+                                    f"skips or reorders them still passes",
+                           where=CASES_FILE))
     return out
 
 
@@ -357,6 +427,23 @@ def generate(skill, gained=()):
         out.append(_case("improvement", f"{name}-imp-{i:02d}",
                          f"{TODO}: a request that exercises `{cap}`",
                          f"the new capability is used and reported: {cap}"))
+    steps = procedure(skill)
+    if steps:
+        # One `order` item, one matcher per step, every one a `TODO` the pre-flight
+        # refuses until a person writes it. Which tool call shows a step happened is
+        # the author's knowledge, not the text's: "choose the axis range" leaves no call
+        # at all, and a guessed matcher would grade a run on the guess. A code span in
+        # the step is the one thing the text does say, so it rides along as a hint.
+        matchers = []
+        for n, step in enumerate(steps, 1):
+            hints = CODE_SPAN_RE.findall(step)
+            matchers.append(f"{TODO}: step {n} - {step.replace('`', '').strip()[:60]}"
+                            + (f" (hint: {', '.join(hints[:2])})" if hints else ""))
+        case = _case("procedure", f"{name}-proc-01",
+                     f"{TODO}: a request that makes the skill run its numbered steps",
+                     "the steps are followed in the order the body gives them")
+        case["process"] = [{"id": "steps-in-order", "order": matchers}]
+        out.append(case)
     return {"skill_name": name, "evals": out}
 
 

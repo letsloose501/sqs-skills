@@ -11,7 +11,7 @@ description: >-
 
 # Quality rules
 
-Every finding the suite can emit, all 101 of them, rendered from `scripts/rules.py`.
+Every finding the suite can emit, all 102 of them, rendered from `scripts/rules.py`.
 
 `sqs.py explain <CODE>` prints the same reasoning at the terminal, and `sqs.py rules --module security` lists one module.
 
@@ -80,6 +80,7 @@ Each rule carries two gradings that are about **the check**, not about the skill
 | `CS001` | warning | medium | medium | no | Promise with no instruction behind it |
 | `CS002` | info | low | medium | no | Expectation the description never claimed |
 | `CS003` | info | low | high | no | Capability the skill never announces |
+| `CS004` | info | medium | medium | no | Numbered steps no case checks |
 
 ### CS001 - Promise with no instruction behind it
 
@@ -98,6 +99,12 @@ Each rule carries two gradings that are about **the check**, not about the skill
 **Why it matters.** A bundled script reaches the network (`CB001`) or spawns a process (`CB002`) and no wording anywhere in the skill says so. The bottom row of the disagreement table: it does `Z` and never mentioned it. `capabilities` says what a skill CAN do to the machine; this says you were not told. Reading the environment (`CB003`) is out of scope on purpose - the words an author would announce it with are ordinary prose in the same breath, so the test cannot tell an announcement from the subject matter.
 
 **Fix.** Not a defect - say so in the body, in the sentence that sends the agent to the script.
+
+### CS004 - Numbered steps no case checks
+
+**Why it matters.** The body prescribes a procedure - three or more numbered steps - and `evals/evals.json` exists, but no case in it carries `process`. Every case grades what the run left behind; none grades how it got there, so a run that skips a step or does them out of order passes as long as the answer comes out right. SkillForgeBench (arXiv 2610.14918) separates the two and finds strict process scores far below loose ones: following most steps and following every step are different measurements.
+
+**Fix.** Add a `process` item to the case that exercises the procedure: `order` for the steps that must come in sequence, `after`/`then` for a check that must follow the last change. `sqs.py cases <skill> --generate --format json` drafts one with a `TODO` matcher per step. A numbered list of options rather than steps reads the same to this check - suppress it there.
 
 ## compat (CPxxx)
 

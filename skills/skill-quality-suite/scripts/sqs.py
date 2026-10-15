@@ -550,9 +550,10 @@ def cmd_cases(skills, cfg, since, apply_it, fmt="text"):
     """`sqs.py cases <skill> --generate` - the case set the skill's own sources ask for.
 
     Every expensive layer here needs a case set and none of them helps you write one.
-    This writes the first draft out of the three sources that can be read without an
-    agent: the expectations you wrote beside the skill, the outcomes its description
-    commits to, and - with `--since` - the capabilities it gained since then.
+    This writes the first draft out of the sources that can be read without an agent:
+    the expectations you wrote beside the skill, the outcomes its description commits
+    to, the numbered steps its body prescribes, and - with `--since` - the capabilities
+    it gained since then.
 
     It is a draft on purpose. Every case carries `needs_review`, an assertion appears
     only where the source named something checkable, and the rest is `TODO`: a case
@@ -584,12 +585,12 @@ def cmd_cases(skills, cfg, since, apply_it, fmt="text"):
         for c in payload["evals"]:
             by_source.setdefault(c["source"], []).append(c)
         print(f"\n{s.folder}: {len(payload['evals'])} case(s) drafted")
-        for source in ("expectation", "promise", "improvement"):
+        for source in ("expectation", "promise", "improvement", "procedure"):
             for c in by_source.get(source, []):
                 print(f"  {source:<12} {c['id']:<22} {c['prompt'][:56]}")
         if not payload["evals"]:
-            print(f"  nothing to draft - no {caseset.EXPECTATIONS}, and the description "
-                  f"commits to no outcome a pattern can see")
+            print(f"  nothing to draft - no {caseset.EXPECTATIONS}, the description "
+                  f"commits to no outcome a pattern can see, and the body numbers no steps")
             continue
         target = os.path.join(s.root, caseset.CASES_FILE.replace("/", os.sep))
         if not apply_it:

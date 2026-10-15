@@ -245,6 +245,71 @@ it is the skill's own code, so it runs only under `--trust-target`. **Safety vio
 patterns applied to what the agent actually ran, so a rule reported at rest and a rule
 reported in flight cannot drift apart.
 
+### Process: how the run got there
+
+Everything above grades what a run left behind. A skill that says "read the ledger, then
+append one row" is also served by a run that appends three rows blind and still prints
+the right balance - and every assertion, output and judge passes it. SkillForgeBench
+(arXiv 2610.14918) grades the two halves apart, completion rubrics and process rubrics,
+and finds strict process scores far below loose ones: following most of the steps and
+following all of them are different measurements. `process` is the second half:
+
+```json
+"process": [
+  {"id": "read-first", "order": ["Read:ledger.csv", "Edit|Write:ledger.csv"]},
+  {"id": "read-back",  "after": "Edit|Write:ledger.csv", "then": "Read:ledger.csv"},
+  {"id": "one-row",    "count": "Edit|Write:ledger.csv", "max": 1},
+  {"id": "offline",    "never": "WebFetch|WebSearch"}
+]
+```
+
+A matcher is `Tool` or `Tool:<assertion>` - names joined by `|`, then the assertion
+grammar above, applied to the call's input as the transcript recorded it.
+
+| form | passes when | the paper's category |
+|---|---|---|
+| `order: [A, B, ...]` | the matchers occur in this order, others between them allowed | phase adherence |
+| `after: A, then: B` | some `B` comes after the **last** `A` | verification loop |
+| `never: A` | no call matches | scope discipline |
+| `count: A, min, max` | the number of matching calls is within bounds | scope discipline |
+
+`after` anchors on the last `A` because a file read back before it was edited again
+verifies nothing about what was left; and an `A` that never came fails the item, since a
+check of a change that never happened is not a verified run. The paper grades its rubrics
+with a model. These are deterministic for the same reason `judge` is a program - and the
+limit is the same one stated plainly: a step that is only thought ("choose the template
+that fits") leaves no tool call, so no matcher can see it, and it stays the author's to
+judge. Inputs are kept up to 2000 characters per call; check long file content through
+`outputs.contains`, not a matcher.
+
+The scripted fixture shows the case it exists for - the same answer and the same ledger
+row, reached by writing blind, searching the web and writing twice:
+
+```
+                             treatment    baseline       delta
+  task success                    100%          0%       +100%
+  process followed                  0%          0%          0%
+  process items met                 0%         50%         50%
+  strict (both)                     0%          0%          0%
+```
+
+- **process followed** is strict: the share of runs where every item held. It carries
+  the same gate as task success - a procedure followed with the skill unread is the
+  model's habit, not the skill's instruction.
+- **process items met** is loose: the mean share of items held, not gated, read like
+  `tool calls`. The baseline's 50% is its `count` and `never` items holding because it
+  did nothing at all - which is why the strict number is the one the gate reads.
+- **strict (both)** is completion and process in the same run.
+
+All three are over the cases that carry `process`, and none of the rows appears when no
+case does. Task success keeps its old meaning, so a run saved before `process` existed
+still compares. The pre-flight refuses an item it cannot grade - an unknown or doubled
+form, `after` with no `then`, a bad `re:`, an inverted `count`, a matcher still opening
+with `TODO` - and `cases --generate` drafts one `order` item from the numbered steps in
+the body, a `TODO` per step for exactly that reason: which call shows a step happened is
+the author's knowledge, not the text's. `CS004` reports a skill whose body numbers three
+or more steps while its set carries no `process` at all.
+
 ## Regression gate
 
 ```
@@ -263,7 +328,10 @@ REGRESSION DETECTED   v1 → v2
     [0.00 → 1.00] should no-trigger: Rename every receipt photo in this folder by date
 ```
 
-Quality falling fails the gate. Cost rising is reported and does not, because a skill
+Quality falling fails the gate, and process is quality: `process followed` and `strict
+success` sit beside task success, and a task whose procedure stopped being followed is
+listed as `<id> (process)` under the tasks that got worse - even when every answer still
+came out right. Cost rising is reported and does not, because a skill
 that got 18% more expensive and 20% more reliable is a trade somebody has to look at,
 not a build to break; `--fail-on-cost` moves the line when a budget depends on it.
 

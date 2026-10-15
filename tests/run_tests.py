@@ -1699,6 +1699,206 @@ def environment_checks():
     return out
 
 
+PROCESS_CASE = {
+    "id": "ledger-p", "prompt": "Log this receipt: 12.40 EUR at Bakery Nord on 2026-09-18",
+    "expected_output": "one row appended to ledger.csv, read back, and the new balance",
+    "assertions": ["12.40", "re:balance"],
+    "outputs": [{"path": "ledger.csv", "contains": ["Bakery Nord", "12.40"]}],
+    "process": [
+        {"id": "read-first", "order": ["Read:ledger.csv", "Edit|Write:ledger.csv"]},
+        {"id": "read-back", "after": "Edit|Write:ledger.csv", "then": "Read:ledger.csv"},
+        {"id": "one-row", "count": "Edit|Write:ledger.csv", "max": 1},
+        {"id": "offline", "never": "WebFetch|WebSearch"}]}
+
+
+def process_checks(tree, cases_path, good, run_eval, runtime_of):
+    """`process`: graded apart from completion, gated on the skill loading, in the gate.
+
+    The good and the bad script give the same answer and leave the same ledger row, so
+    completion cannot tell them apart - which is the whole reason the field exists. The
+    bad one breaks each of the four items for a different reason, and the exact set of
+    failures is asserted: a grader that failed the run for the wrong reason would pass a
+    test that only looked at the rate.
+    """
+    out = []
+    want = {
+        "script-process-good.json": {"success_rate": 1.0, "process_rate": 1.0,
+                                     "process_item_rate": 1.0, "strict_rate": 1.0},
+        "script-process-bad.json": {"success_rate": 1.0, "process_rate": 0.0,
+                                    "process_item_rate": 0.0, "strict_rate": 0.0},
+    }
+    for script, expected in want.items():
+        rt = runtime_of(script, [PROCESS_CASE])
+        if not rt:
+            continue
+        treat = rt["sides"]["treatment"]
+        for key, value in expected.items():
+            if treat.get(key) != value:
+                out.append(f"process: {script} treatment {key} {treat.get(key)}, "
+                           f"expected {value}")
+        # the baseline answers without the skill and reads nothing: its procedure is
+        # not followed either, and the number has to say so rather than be n/a
+        if rt["sides"]["baseline"].get("process_rate") != 0.0:
+            out.append(f"process: {script} baseline process_rate "
+                       f"{rt['sides']['baseline'].get('process_rate')}, expected 0.0")
+    rt = runtime_of("script-process-bad.json", [PROCESS_CASE])
+    failed = {c for f in (rt or {}).get("failures") or [] if f["side"] == "treatment"
+              for c in f["failed_checks"]}
+    expected_fail = {
+        "step:read-first (`Read:ledger.csv` never came)",
+        "step:read-back (no `Read:ledger.csv` after the last `Edit|Write:ledger.csv`)",
+        "step:one-row (2 call(s), at most 1 allowed)",
+        "step:offline (call 2 was `WebSearch`)"}
+    if rt and failed != expected_fail:
+        out.append(f"process: the bad script failed for the wrong reasons: {sorted(failed)}")
+    # The baseline never edits. A read-back of a change that never happened is not a
+    # verified run, so `after` has to fail there with that reason - not pass vacuously.
+    base_failed = {c for f in (rt or {}).get("failures") or [] if f["side"] == "baseline"
+                   for c in f["failed_checks"]}
+    if rt and "step:read-back (`Edit|Write:ledger.csv` never came, so nothing could " \
+              "follow it)" not in base_failed:
+        out.append(f"process: `after` with no anchor did not fail as such: {sorted(base_failed)}")
+
+    # `after` anchors on the LAST change: read back once, then edited again, so what
+    # was read is not what was left. Anchoring on the first edit would pass this.
+    with open(os.path.join(tree, "script-process-good.json"), encoding="utf-8") as f:
+        stale = json.load(f)
+    for rule in stale["rules"]:
+        if rule.get("with_skill") is True and rule["contains"] == "Log this receipt":
+            rule["run"]["tools"] = rule["run"]["tools"] + [rule["run"]["tools"][1]]
+    with open(os.path.join(tree, "script-process-stale.json"), "w", encoding="utf-8") as f:
+        json.dump(stale, f)
+    rt = runtime_of("script-process-stale.json", [PROCESS_CASE])
+    failed = {c for f in (rt or {}).get("failures") or [] if f["side"] == "treatment"
+              for c in f["failed_checks"]}
+    if rt and failed != {"step:read-back (no `Read:ledger.csv` after the last "
+                         "`Edit|Write:ledger.csv`)", "step:one-row (2 call(s), at most 1 "
+                                                    "allowed)"}:
+        out.append(f"process: a read-back before the last edit was taken as verified: "
+                   f"{sorted(failed)}")
+
+    # The cap on a recorded tool input. The scripted provider hands tools over as they
+    # are, so the real transcript reader is called directly: a command whose tail is
+    # past char 300 has to survive, or a matcher on it fails every run in silence.
+    sys.path.insert(0, os.path.join(SUITE, "scripts"))
+    from evaluation import providers, tasks as taskmod
+    tools, skills = [], []
+    command = "cd /work && " + "echo filler && " * 40 + "git push origin main"
+    providers.collect_tools({"type": "tool_use", "name": "Bash",
+                             "input": {"command": command}}, tools, skills)
+    ok, _ = taskmod.grade_process_item({"never": "Bash:git push"}, tools)
+    if ok:
+        out.append(f"process: a command cut at {len(tools[0][1])} chars hid `git push` "
+                   f"at char {command.index('git push')} from a matcher")
+
+    # `order` when the steps happened, but the wrong way round
+    swapped = json.loads(open(os.path.join(tree, "script-process-good.json"),
+                              encoding="utf-8").read())
+    for rule in swapped["rules"]:
+        if rule.get("with_skill") is True and rule["contains"] == "Log this receipt":
+            rule["run"]["tools"] = rule["run"]["tools"][1:]   # edit first, then read
+    with open(os.path.join(tree, "script-process-swapped.json"), "w", encoding="utf-8") as f:
+        json.dump(swapped, f)
+    rt = runtime_of("script-process-swapped.json", [PROCESS_CASE])
+    failed = {c for f in (rt or {}).get("failures") or [] if f["side"] == "treatment"
+              for c in f["failed_checks"]}
+    if rt and failed != {"step:read-first (`Edit|Write:ledger.csv` came only before "
+                         "`Read:ledger.csv`)"}:
+        out.append(f"process: a reversed order was not reported as reversed: {sorted(failed)}")
+
+    # The invocation gate holds on this half too: the good procedure with the skill
+    # never loading is the model's habit, and is not credited to the skill.
+    for rule in swapped["rules"]:
+        if rule.get("with_skill") is True and rule["contains"] == "Log this receipt":
+            rule["run"]["tools"] = json.loads(open(os.path.join(
+                tree, "script-process-good.json"), encoding="utf-8").read())["rules"][0][
+                    "run"]["tools"]
+            rule["run"]["skills"] = []
+    with open(os.path.join(tree, "script-process-unloaded.json"), "w",
+              encoding="utf-8") as f:
+        json.dump(swapped, f)
+    rt = runtime_of("script-process-unloaded.json", [PROCESS_CASE])
+    if rt:
+        treat = rt["sides"]["treatment"]
+        if (treat.get("process_rate"), treat.get("process_item_rate")) != (0.0, 1.0):
+            out.append(f"process: an unloaded skill was credited with the procedure: "
+                       f"strict {treat.get('process_rate')}, loose "
+                       f"{treat.get('process_item_rate')} (expected 0.0 and 1.0)")
+
+    # The gate: same answers, procedure broken - a regression on process alone.
+    with open(cases_path, "w", encoding="utf-8") as f:
+        json.dump({"skill_name": "ledger-lite", "evals": [PROCESS_CASE]}, f)
+    run_eval("script-process-good.json", "--runtime", "--save", "p1")
+    run_eval("script-process-bad.json", "--runtime", "--save", "p2")
+    cmp = subprocess.run([sys.executable, SQS, "eval", "ledger-lite", "--skills-dir", tree,
+                          "--compare", "p1", "p2"],
+                         capture_output=True, text=True, encoding="utf-8", cwd=REPO)
+    if cmp.returncode != 1:
+        out.append(f"process: a process-only regression exited {cmp.returncode}, expected 1")
+    for expected in ("REGRESSION DETECTED", "process followed", "strict success",
+                     "ledger-p (process)"):
+        if expected not in cmp.stdout:
+            out.append(f"process: the regression report never mentions {expected!r}")
+    if "! task success" in cmp.stdout:
+        out.append("process: task success was flagged although both runs answered right")
+    # ...and two runs saved without `process` must not grow process rows at all
+    cmp = subprocess.run([sys.executable, SQS, "eval", "ledger-lite", "--skills-dir", tree,
+                          "--compare", "v1", "v2"],
+                         capture_output=True, text=True, encoding="utf-8", cwd=REPO)
+    if "process" in cmp.stdout:
+        out.append("process: a comparison of runs saved without `process` reports process "
+                   "rows - an absent number read as a measured one")
+
+    # The pre-flight refuses an item it cannot grade, before anything is spent.
+    for label, process in (
+            ("a draft matcher", [{"never": "TODO: step 1 - read"}]),
+            ("`after` with no `then`", [{"after": "Write"}]),
+            ("a broken regex in a matcher", [{"never": "Bash:re:(unclosed"}]),
+            ("an item with two forms", [{"never": "Bash", "order": ["Read", "Write"]}]),
+            ("an inverted count", [{"count": "Write", "min": 3, "max": 1}]),
+            ("`process` that is not a list", {"never": "Bash"})):
+        with open(cases_path, "w", encoding="utf-8") as f:
+            json.dump({"skill_name": "ledger-lite",
+                       "evals": [dict(PROCESS_CASE, process=process)]}, f)
+        r = run_eval("script-process-good.json", "--runtime")
+        if r.returncode != 2 or "nothing was spent" not in r.stderr:
+            out.append(f"process pre-flight let {label} through: exit {r.returncode}, "
+                       f"{(r.stdout + r.stderr)[-200:]!r}")
+    # a case graded on process alone is a graded case, not an ungraded one
+    only = {k: v for k, v in PROCESS_CASE.items() if k not in ("assertions", "outputs")}
+    rt = runtime_of("script-process-good.json", [only])
+    if rt and (rt.get("ungraded_tasks") or rt["sides"]["treatment"].get("process_rate") != 1.0):
+        out.append(f"process: a process-only case read as ungraded: {rt.get('ungraded_tasks')}, "
+                   f"{rt['sides']['treatment'].get('process_rate')}")
+
+    # The generator drafts one `order` item from ledger-lite's three numbered steps, a
+    # `TODO` per step carrying the code span as a hint - and the pre-flight refuses it.
+    r = subprocess.run([sys.executable, SQS, "cases", "ledger-lite", "--skills-dir", tree,
+                        "--generate", "--format", "json"],
+                       capture_output=True, text=True, encoding="utf-8", cwd=REPO)
+    try:
+        drafted = [c for c in json.loads(r.stdout)["ledger-lite"]["evals"]
+                   if c["source"] == "procedure"]
+    except (ValueError, KeyError) as e:
+        drafted = []
+        out.append(f"process: cases --generate produced no JSON: {e}")
+    order = drafted[0]["process"][0]["order"] if drafted else []
+    if len(order) != 3 or not all(m.startswith("TODO: step") for m in order) \
+            or "hint: ledger.csv" not in order[1]:
+        out.append(f"process: the drafted procedure is not three TODO steps with the "
+                   f"ledger.csv hint on step 2: {order}")
+    if drafted:
+        with open(cases_path, "w", encoding="utf-8") as f:
+            json.dump({"skill_name": "ledger-lite", "evals": drafted}, f)
+        r = run_eval("script-process-good.json", "--runtime")
+        if r.returncode != 2 or "nothing was spent" not in r.stderr:
+            out.append("process: the pre-flight ran a drafted procedure still full of TODO")
+
+    with open(cases_path, "w", encoding="utf-8") as f:
+        f.write(good)
+    return out
+
+
 def evaluation_checks():
     """The runtime layer against the scripted provider, in a copy nothing else touches."""
     out = []
@@ -1939,6 +2139,7 @@ def evaluation_checks():
         os.remove(judge_py)
         with open(cases_path, "w", encoding="utf-8") as f:
             f.write(good)
+        out += process_checks(tree, cases_path, good, run_eval, runtime_of)
 
     # the trigger dataset parser must refuse what it cannot read rather than guess
     sys.path.insert(0, os.path.join(SUITE, "scripts"))

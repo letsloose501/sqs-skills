@@ -146,5 +146,5 @@ like a real one, and that is how a compatibility tool stops being believed.
 
 - [Source on GitHub](https://github.com/letsloose501/sqs-skills) - Apache-2.0
 - [The Agent Skills specification](https://agentskills.io/specification) it validates against
-- 101 coded rules, every one of them with a test that has watched it fire
+- 102 coded rules, every one of them with a test that has watched it fire
 - [Support](https://github.com/letsloose501/sqs-skills/blob/main/SUPPORT.md) · [Contributing](https://github.com/letsloose501/sqs-skills/blob/main/CONTRIBUTING.md) · [NOTICE](https://github.com/letsloose501/sqs-skills/blob/main/NOTICE)

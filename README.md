@@ -16,7 +16,7 @@ dangerous scripts before you trust it, checks whether it works on ten other agen
 measures whether it improves the agent's work at all.
 
 For Claude Code, OpenAI Codex, Cursor, Gemini CLI, Antigravity, OpenCode, Cline, Roo
-Code, Windsurf and GitHub Copilot. 101 coded rules, each one watched firing on a test
+Code, Windsurf and GitHub Copilot. 102 coded rules, each one watched firing on a test
 case. Python standard library only; the static half is offline and deterministic.
 
 ```bash
@@ -103,7 +103,7 @@ into the pass so you see whether an edit stole their requests.
 
 📖 **[Documentation](https://letsloose501.github.io/sqs-skills/)** ·
 🧪 **[Worked examples with real output](examples/)** ·
-📋 **[All 101 rules](docs/quality-rules.md)**
+📋 **[All 102 rules](docs/quality-rules.md)**
 
 ## Why
 
@@ -254,7 +254,7 @@ page, plan, write a copy.
 - **· info** - a nudge. Real, small, safe to leave.
 
 Every finding carries a rule code: `sqs.py explain ST008` prints the reasoning and the fix,
-`sqs.py rules` lists all 101. `--format text|json|github|sarif|board`, `--strict`,
+`sqs.py rules` lists all 102. `--format text|json|github|sarif|board`, `--strict`,
 `--changed`, `--since`, `--baseline`, `--min-confidence`, `--score`. Exit codes: `0` clean,
 `1` findings that count as failures, `2` usage error.
 

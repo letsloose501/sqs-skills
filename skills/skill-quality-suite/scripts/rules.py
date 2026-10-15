@@ -600,6 +600,19 @@ _ROWS = {
               "cannot tell an announcement from the subject matter.",
               "Not a defect - say so in the body, in the sentence that sends the agent to "
               "the script.", False),
+    "CS004": ("info", "Numbered steps no case checks",
+              "The body prescribes a procedure - three or more numbered steps - and "
+              "`evals/evals.json` exists, but no case in it carries `process`. Every case "
+              "grades what the run left behind; none grades how it got there, so a run "
+              "that skips a step or does them out of order passes as long as the answer "
+              "comes out right. SkillForgeBench (arXiv 2610.14918) separates the two and "
+              "finds strict process scores far below loose ones: following most steps and "
+              "following every step are different measurements.",
+              "Add a `process` item to the case that exercises the procedure: `order` for "
+              "the steps that must come in sequence, `after`/`then` for a check that must "
+              "follow the last change. `sqs.py cases <skill> --generate --format json` "
+              "drafts one with a `TODO` matcher per step. A numbered list of options rather "
+              "than steps reads the same to this check - suppress it there.", False),
 }
 
 # ---- rule metadata ---------------------------------------------------------
@@ -731,6 +744,7 @@ GRADES = {
     "CS001": ("medium", "medium"),
     "CS002": ("low", "medium"),   # stem overlap, the same test route and EV007 run on
     "CS003": ("low", "high"),     # an author who mentioned it once, elsewhere, is not silent
+    "CS004": ("medium", "medium"),  # the numbering is exact; options numbered like steps are not
 }
 
 CONFIDENCE_ORDER = ("unrated", "low", "medium", "high")

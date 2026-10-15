@@ -12,7 +12,7 @@ python scripts/sqs.py fix ./my-skill --apply  # the repairs with one right answe
 
 ## A skill with nothing wrong with it
 
-The negative case for all 101 rules at once. Any finding here would be a false positive, which is why the corpus asserts this one reports **nothing at all**.
+The negative case for all 102 rules at once. Any finding here would be a false positive, which is why the corpus asserts this one reports **nothing at all**.
 
 ```markdown
 ---

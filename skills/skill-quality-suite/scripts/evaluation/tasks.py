@@ -42,6 +42,25 @@ runs it only under `--trust-target`, like a tree's own routing runner (`EV006`).
 A case with no assertions, no `outputs` and no `judge` is **ungraded**, and stays that way
 in the report. Counting it as a pass would turn "nobody said what success is" into evidence
 of success, which is the one number this module must never produce.
+
+`process` grades the other half: not what the run left behind but how it got there. A
+skill that says "read the ledger, then append one row" can be served by an answer that
+appends three rows blind and still gets the total right; every check above passes it.
+SkillForgeBench (arXiv 2610.14918) measures exactly this split - completion rubrics
+against process rubrics - and its strict process scores sit far below its loose ones.
+Each item reads the ordered tool calls the transcript recorded:
+
+    "process": [
+      {"id": "read-first", "order": ["Read:ledger.csv", "Edit|Write:ledger.csv"]},
+      {"id": "verify",     "after": "Edit|Write:ledger.csv", "then": "Read:ledger.csv"},
+      {"id": "one-row",    "count": "Edit|Write:ledger.csv", "max": 1},
+      {"id": "offline",    "never": "WebFetch|WebSearch"}]
+
+A matcher is `Tool` or `Tool:<assertion>`: names joined by `|`, then the same assertion
+grammar as above, applied to the call's input. The paper grades its rubrics with a model;
+these are deterministic for the same reason `judge` is a program, and what a tool call
+cannot show - a step that is only thought - is out of their reach and stays the author's.
+Process is graded apart from completion, so `success_rate` keeps meaning what it meant.
 """
 import json
 import os
@@ -65,7 +84,7 @@ def _inside(base, rel):
 class Task:
     __slots__ = ("id", "prompt", "expected", "assertions", "outputs", "legacy_outputs",
                  "fixtures", "forbidden_tools", "max_tool_calls", "timeout",
-                 "expectations", "judge")
+                 "expectations", "judge", "process")
 
     def __init__(self, raw, index, skill_root=None):
         self.id = str(raw.get("id") or index)
@@ -100,10 +119,133 @@ class Task:
         self.timeout = raw.get("timeout") or 300
         # kept raw, like `outputs`: a malformed judge is refused by the pre-flight
         self.judge = raw.get("judge")
+        # kept raw too: an item the grader cannot read is the pre-flight's to refuse
+        self.process = raw.get("process")
 
     @property
     def graded(self):
+        """Whether anything decides completion. Process is counted on its own."""
         return bool(self.assertions or self.outputs or self.judge)
+
+    @property
+    def process_items(self):
+        return [p for p in self.process if isinstance(p, dict)] \
+            if isinstance(self.process, list) else []
+
+
+# ---- process: how the run got there -----------------------------------------------
+
+PROCESS_FORMS = ("order", "after", "never", "count")
+
+
+def parse_matcher(m):
+    """(tool names, assertion or None, problem) for one `Tool[|Tool]:assertion` string.
+
+    Split at the first colon only: a tool name never carries one (`mcp__server__tool`
+    included), and the assertion after it may - `re:` and `not:` are themselves prefixes.
+    """
+    if not isinstance(m, str) or not m.strip():
+        return None, None, f"matcher {m!r} is not a non-empty string"
+    tool, sep, rest = m.partition(":")
+    names = [n.strip() for n in tool.split("|")]
+    if not all(names):
+        return None, None, f"matcher `{m}` has an empty tool name"
+    return set(names), (rest if sep else None), ""
+
+
+def matches(m, call):
+    names, assertion, problem = parse_matcher(m)
+    if problem:
+        return False
+    name, arg = call
+    if name not in names:
+        return False
+    return assertion is None or check_text(assertion, arg or "", "the call")[0]
+
+
+def process_problem(item):
+    """Why this process item cannot be graded as written, or ""."""
+    if not isinstance(item, dict):
+        return f"process item {item!r} is not an object"
+    forms = [f for f in PROCESS_FORMS if f in item]
+    if len(forms) != 1:
+        return (f"process item {item.get('id', '?')!r} needs exactly one of "
+                f"{', '.join(PROCESS_FORMS)}, has {', '.join(forms) or 'none'}")
+    form = forms[0]
+    if form == "order":
+        seq = item["order"]
+        if not isinstance(seq, list) or len(seq) < 2:
+            return "`order` needs a list of at least two matchers - one is `count` with `min: 1`"
+        used = seq
+    elif form == "after":
+        if "then" not in item:
+            return "`after` without `then` - nothing says what has to follow it"
+        used = [item["after"], item["then"]]
+    elif form == "count":
+        lo, hi = item.get("min"), item.get("max")
+        if lo is None and hi is None:
+            return "`count` needs `min`, `max` or both"
+        for v in (lo, hi):
+            if v is not None and (not isinstance(v, int) or isinstance(v, bool) or v < 0):
+                return f"`count` bound {v!r} is not a whole number >= 0"
+        if lo is not None and hi is not None and lo > hi:
+            return f"`count` has min {lo} above max {hi}"
+        used = [item["count"]]
+    else:
+        used = [item["never"]]
+    for m in used:
+        _, assertion, problem = parse_matcher(m)
+        if problem:
+            return problem
+        if PLACEHOLDER_RE.match(m):
+            return f"matcher `{m}` is still a draft - it opens with `TODO`"
+        if assertion is not None:
+            bad = _bad_regex(assertion)
+            if bad:
+                return bad
+    return ""
+
+
+def _first(m, calls, start=0):
+    return next((i for i in range(start, len(calls)) if matches(m, calls[i])), None)
+
+
+def grade_process_item(item, calls):
+    """(ok, detail) for one item against the run's ordered tool calls."""
+    if "order" in item:
+        pos, prev = 0, None
+        for m in item["order"]:
+            i = _first(m, calls, pos)
+            if i is None:
+                if prev is not None and _first(m, calls) is not None:
+                    return False, f"`{m}` came only before `{prev}`"
+                return False, f"`{m}` never came"
+            pos, prev = i + 1, m
+        return True, ""
+    if "after" in item:
+        hits = [i for i, c in enumerate(calls) if matches(item["after"], c)]
+        if not hits:
+            # Nothing to verify is not a verified run: the step that should have been
+            # checked never happened, and a pass here would hide that.
+            return False, f"`{item['after']}` never came, so nothing could follow it"
+        if _first(item["then"], calls, hits[-1] + 1) is None:
+            return False, f"no `{item['then']}` after the last `{item['after']}`"
+        return True, ""
+    if "never" in item:
+        i = _first(item["never"], calls)
+        return (True, "") if i is None else (False, f"call {i + 1} was `{calls[i][0]}`")
+    n = sum(1 for c in calls if matches(item["count"], c))
+    lo, hi = item.get("min"), item.get("max")
+    if lo is not None and n < lo:
+        return False, f"{n} call(s), at least {lo} required"
+    if hi is not None and n > hi:
+        return False, f"{n} call(s), at most {hi} allowed"
+    return True, ""
+
+
+def item_id(item, index):
+    form = next((f for f in PROCESS_FORMS if f in item), "item")
+    return str(item.get("id") or f"{form}-{index}")
 
 
 def judge_argv(judge, skill_root, workdir):
@@ -153,18 +295,32 @@ def output_spec(entry):
 
 
 class Grade:
-    __slots__ = ("checks", "graded", "passed", "unnecessary", "forbidden", "unsafe")
+    __slots__ = ("checks", "graded", "passed", "unnecessary", "forbidden", "unsafe",
+                 "process", "process_graded", "process_passed")
 
-    def __init__(self, checks, graded, unnecessary=0, forbidden=(), unsafe=()):
+    def __init__(self, checks, graded, unnecessary=0, forbidden=(), unsafe=(), process=()):
         self.checks = checks                # [(what, ok, detail)]
         self.graded = graded
         self.passed = graded and all(ok for _, ok, _ in checks)
         self.unnecessary = unnecessary
         self.forbidden = list(forbidden)
         self.unsafe = list(unsafe)
+        # [(item id, ok, detail)] - apart from `checks`, so `passed` stays completion
+        self.process = list(process)
+        self.process_graded = bool(self.process)
+        self.process_passed = self.process_graded and all(ok for _, ok, _ in self.process)
+
+    @property
+    def process_share(self):
+        """The loose score: the share of process items met, or None with none to meet."""
+        if not self.process:
+            return None
+        return sum(1 for _, ok, _ in self.process if ok) / len(self.process)
 
     def as_dict(self):
         return {"graded": self.graded, "passed": self.passed,
+                "process_passed": self.process_passed if self.process_graded else None,
+                "process": [{"id": i, "ok": ok, "detail": d} for i, ok, d in self.process],
                 "checks": [{"what": w, "ok": ok, "detail": d} for w, ok, d in self.checks],
                 "unnecessary_tool_calls": self.unnecessary,
                 "forbidden_tools_used": self.forbidden,
@@ -256,7 +412,14 @@ def grade(task, run, skill_root=None):
             if rx.search(arg):
                 unsafe.append(f"{label} (via {name})")
                 break
-    return Grade(checks, task.graded, unnecessary, forbidden, sorted(set(unsafe)))
+
+    process = []
+    for i, item in enumerate(task.process_items, 1):
+        if process_problem(item):
+            continue                                  # refused by the pre-flight
+        ok, detail = grade_process_item(item, run.tools)
+        process.append((item_id(item, i), ok, detail))
+    return Grade(checks, task.graded, unnecessary, forbidden, sorted(set(unsafe)), process)
 
 
 # A field that still opens with the placeholder `sqs.py evals --init` and `sqs.py cases
@@ -329,13 +492,18 @@ def preflight(skill_root, task_list):
                         rel = arg[len("{skill}/"):]
                         if not os.path.isfile(os.path.join(base, rel)):
                             why.append(f"judge script `{rel}` does not exist")
+        if t.process is not None:
+            if not isinstance(t.process, list) or not t.process:
+                why.append("`process` is not a non-empty list of items")
+            else:
+                why += [p for p in map(process_problem, t.process) if p]
         if why:
             out.append((t.id, "unrunnable", "; ".join(why)))
-        elif not t.graded:
+        elif not t.graded and not t.process_items:
             extra = (" - its skill-creator `expectations` are graded by a model there and "
                      "are not read here" if t.expectations else "")
-            out.append((t.id, "ungraded", "no `assertions`, `outputs` or `judge` - nothing "
-                                          f"decides whether it passed{extra}"))
+            out.append((t.id, "ungraded", "no `assertions`, `outputs`, `judge` or `process` "
+                                          f"- nothing decides whether it passed{extra}"))
         if t.legacy_outputs:
             names = ", ".join(f"`{f}`" for f in t.legacy_outputs)
             out.append((t.id, "legacy",

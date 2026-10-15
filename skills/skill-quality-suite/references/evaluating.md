@@ -209,7 +209,10 @@ cannot do this says so in its report rather than calling the comparison a baseli
             "files": ["evals/files/ledger.csv"],
             "outputs": [{"path": "ledger.csv", "contains": ["Bakery Nord", "12.40"]}],
             "forbidden_tools": ["WebSearch"],
-            "max_tool_calls": 6}]}
+            "max_tool_calls": 6,
+            "process": [{"id": "read-first",
+                         "order": ["Read:ledger.csv", "Edit|Write:ledger.csv"]},
+                        {"id": "one-row", "count": "Edit|Write:ledger.csv", "max": 1}]}]}
 ```
 
 - an assertion is a **substring** by default, a **regex** behind `re:`, a **prohibition**
@@ -229,10 +232,19 @@ cannot do this says so in its report rather than calling the comparison a baseli
   shell line: `["{python}", "{skill}/evals/check.py", "{workdir}/totals.md"]`. It is the
   skill's own code, so a runtime pass runs it only under `--trust-target`;
 - `forbidden_tools` and `max_tool_calls` are how "it worked" is told apart from "it
-  worked eventually, after eleven tool calls and a web search".
+  worked eventually, after eleven tool calls and a web search";
+- `process` grades **how the run got there**, apart from what it left behind, against the
+  ordered tool calls in the transcript. A matcher is `Tool` or `Tool:<assertion>` (names
+  joined by `|`, the assertion grammar above on the call's input). Four forms: `order`
+  (these calls in this order), `after`/`then` (a check after the **last** change),
+  `never`, and `count` with `min`/`max`. It is reported as `process followed` (every item,
+  gated on the skill loading like task success), `process items met` (the loose share) and
+  `strict (both)`, and a drop fails `--compare`. Use it when the body numbers steps whose
+  order matters - a duplicate check before an append, a read-back after an edit - and
+  `CS004` will ask for it. A step that is only thought leaves no call and cannot be matched.
 
-A case with **no assertions and no outputs is ungraded**, and stays that way in the
-report. Counting it as a pass would turn "nobody said what success is" into evidence of
+A case with **no assertions, no outputs, no judge and no `process` is ungraded**, and stays
+that way in the report. Counting it as a pass would turn "nobody said what success is" into evidence of
 success. skill-creator's `expectations` are graded by a model there and are not read here.
 
 Write assertions **after** you have seen the first outputs: you rarely know what good
@@ -359,7 +371,7 @@ and body and write the claims out as sentences you could be wrong about: *writes
 With no author to ask and no expectation written down, this is all you have.
 
 Turn each sentence into a case with an **assertion, not a rubric**: `outputs`, `assertions`,
-`forbidden_tools` and `max_tool_calls` in `evals.json` cover most of them deterministically,
+`process`, `forbidden_tools` and `max_tool_calls` in `evals.json` cover most of them deterministically,
 and the judge is for what no assertion reaches. Then run it and read what had no evidence.
 
 The three disagreeing is the useful part, and each disagreement means something different:
@@ -387,7 +399,7 @@ harness-agnostic runner.
 |---|---|---|
 | Unit under test | a plugin (needs `plugin.json`) | a skill directory |
 | No-skill arm | built in, on by default; `--ablation none` turns it off | `--all`, two arms |
-| Graders | `regex`, `tool_used`, `tool_order`, `file_exists`, `llm`, `baseline` | assertions plus a judge |
+| Graders | `regex`, `tool_used`, `tool_order`, `file_exists`, `llm`, `baseline` | assertions, outputs, `process` over tool calls, a judge program |
 | Case authoring | `claude plugin eval init` interviews you and writes them | you write the YAML |
 | Report | HTML plus `--json`, optionally published | terminal plus stored runs |
 | Regression diff | not built in | `--compare`, `--fail-on-cost` |

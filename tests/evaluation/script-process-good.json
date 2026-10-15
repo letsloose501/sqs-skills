@@ -1,0 +1,167 @@
+{
+  "_note": "v1 with the receipt task done the way ledger-lite's steps say: read the ledger, append one row, read it back. Every process item passes.",
+  "default": {
+    "text": "I am not sure what to do with that.",
+    "tools": [
+      [
+        "Read",
+        "{}"
+      ]
+    ],
+    "duration_s": 3.0,
+    "tokens_in": 900,
+    "tokens_out": 120,
+    "cost_usd": 0.004,
+    "turns": 1,
+    "skills": []
+  },
+  "rules": [
+    {
+      "contains": "Log this receipt",
+      "with_skill": true,
+      "run": {
+        "text": "Appended 12.40 EUR (Bakery Nord, 2026-09-18). New balance: 42.60",
+        "tools": [
+          [
+            "Read",
+            "{\"file_path\": \"ledger.csv\"}"
+          ],
+          [
+            "Edit",
+            "{\"file_path\": \"ledger.csv\", \"old_string\": \"\", \"new_string\": \"2026-09-18,Bakery Nord,12.40\"}"
+          ],
+          [
+            "Read",
+            "{\"file_path\": \"ledger.csv\"}"
+          ]
+        ],
+        "creates": [
+          {
+            "path": "ledger.csv",
+            "content": "2026-09-18,Bakery Nord,12.40"
+          }
+        ],
+        "duration_s": 5.0,
+        "tokens_in": 2100,
+        "tokens_out": 260,
+        "cost_usd": 0.011,
+        "turns": 2,
+        "skills": [
+          "sqs-under-test:ledger-lite"
+        ]
+      },
+      "bare": true
+    },
+    {
+      "contains": "Log this receipt",
+      "with_skill": false,
+      "run": {
+        "text": "I can note that down, but I do not know where your ledger lives.",
+        "tools": [
+          [
+            "Read",
+            "{}"
+          ]
+        ],
+        "duration_s": 3.5,
+        "tokens_in": 800,
+        "tokens_out": 90,
+        "cost_usd": 0.003,
+        "turns": 1
+      },
+      "bare": true
+    },
+    {
+      "contains": "balance",
+      "with_skill": true,
+      "run": {
+        "text": "Your balance is 42.60 EUR.",
+        "tools": [
+          [
+            "Read",
+            "{}"
+          ]
+        ],
+        "duration_s": 2.0,
+        "tokens_in": 1500,
+        "tokens_out": 60,
+        "cost_usd": 0.006,
+        "turns": 1,
+        "skills": [
+          "ledger-lite"
+        ]
+      },
+      "bare": true
+    },
+    {
+      "contains": "balance",
+      "with_skill": false,
+      "run": {
+        "text": "I do not have access to your balance.",
+        "tools": [],
+        "duration_s": 1.5,
+        "tokens_in": 700,
+        "tokens_out": 40,
+        "cost_usd": 0.002,
+        "turns": 1
+      },
+      "bare": true
+    },
+    {
+      "contains": "Rename every receipt",
+      "bare": false,
+      "run": {
+        "skills": [],
+        "text": "ok"
+      }
+    },
+    {
+      "contains": "receipt",
+      "bare": false,
+      "run": {
+        "skills": [
+          "ledger-lite"
+        ],
+        "text": "ok"
+      }
+    },
+    {
+      "contains": "paid",
+      "bare": false,
+      "run": {
+        "skills": [
+          "ledger-lite"
+        ],
+        "text": "ok"
+      }
+    },
+    {
+      "contains": "balance",
+      "bare": false,
+      "run": {
+        "skills": [
+          "ledger-lite"
+        ],
+        "text": "ok"
+      }
+    },
+    {
+      "contains": "ledger",
+      "bare": false,
+      "run": {
+        "skills": [
+          "ledger-lite"
+        ],
+        "text": "ok"
+      }
+    },
+    {
+      "contains": "",
+      "bare": false,
+      "run": {
+        "skills": [],
+        "text": "ok"
+      }
+    }
+  ]
+}

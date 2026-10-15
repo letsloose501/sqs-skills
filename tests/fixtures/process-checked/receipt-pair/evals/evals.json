@@ -1,0 +1,11 @@
+{
+  "skill_name": "receipt-pair",
+  "evals": [
+    {
+      "id": "pair-01",
+      "prompt": "Which receipt goes with the 18.40 payment on 2026-09-12?",
+      "expected_output": "the matching receipt named",
+      "assertions": ["18.40"]
+    }
+  ]
+}

@@ -107,13 +107,20 @@ def _terminal(stdout):
     return None
 
 
+# How much of one tool call's input is kept. `process` matchers read it, and at 300 a
+# matcher on a path that came after a long `old_string`, or a command at the end of a
+# heredoc, could never match - a silent false fail. 2000 covers a command and its
+# arguments; long file content is `outputs.contains`' to check, not a matcher's.
+TOOL_INPUT_CAP = 2000
+
+
 def collect_tools(node, tools, skills):
     """Tool calls and skill loads, from anywhere in the transcript."""
     if isinstance(node, dict):
         if node.get("type") == "tool_use" and node.get("name"):
             name = node["name"]
             arg = node.get("input") or {}
-            tools.append((name, json.dumps(arg, ensure_ascii=False)[:300]))
+            tools.append((name, json.dumps(arg, ensure_ascii=False)[:TOOL_INPUT_CAP]))
             if name in ("Skill", "skill"):
                 loaded = arg.get("skill") or arg.get("name")
                 if loaded:

@@ -1,0 +1,7 @@
+{
+  "note": "A skill whose body numbers four steps - one of them a duplicate check that only matters if it happens before the append - and a runtime set that grades only the answer and the payables row. A run that appends first and never checks for the duplicate passes every case here. CS004 is the finding: the steps exist, the set exists, nothing in the set checks the steps.",
+  "command": "cases",
+  "expect": [
+    "CS004"
+  ]
+}

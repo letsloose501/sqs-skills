@@ -1,0 +1,16 @@
+{
+  "skill_name": "invoice-filer",
+  "evals": [
+    {
+      "id": "file-01",
+      "prompt": "File invoice-0412.pdf from Nordwerk",
+      "expected_output": "the PDF in the month folder and one payables row",
+      "assertions": ["Nordwerk"],
+      "outputs": [{"path": "payables.csv", "contains": ["0412"]}],
+      "process": [
+        {"id": "duplicate-check-first", "order": ["Read:payables.csv", "Edit|Write:payables.csv"]},
+        {"id": "one-row", "count": "Edit|Write:payables.csv", "max": 1}
+      ]
+    }
+  ]
+}

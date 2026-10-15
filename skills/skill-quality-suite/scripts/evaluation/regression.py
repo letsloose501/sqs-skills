@@ -41,6 +41,12 @@ THRESHOLD = 0.5                      # the same cut `triggers.confusion` fires a
 
 QUALITY = [
     ("runtime", ("sides", "treatment", "success_rate"), "task success"),
+    # Process fails the gate like completion does: a skill whose answers still come out
+    # right after an edit, while the steps it prescribes stopped being followed, got
+    # worse at its job. A run saved before `process` existed has neither key, `dig`
+    # returns None and the row is skipped rather than read as a fall to zero.
+    ("runtime", ("sides", "treatment", "process_rate"), "process followed"),
+    ("runtime", ("sides", "treatment", "strict_rate"), "strict success"),
     ("trigger", ("sets", "validation", "metrics", "precision"), "trigger precision"),
     ("trigger", ("sets", "validation", "metrics", "recall"), "trigger recall"),
     ("trigger", ("sets", "all", "metrics", "precision"), "trigger precision"),
@@ -99,15 +105,20 @@ def labels(root, skill_name):
 
 
 def affected_tasks(before, after):
-    """Task ids whose success rate fell between the two runs."""
+    """Task ids whose success rate or process rate fell between the two runs.
+
+    A process drop is labelled `<id> (process)`: the same task can keep its answer and
+    lose its procedure, and the report has to say which half moved.
+    """
     out = []
     b = ((before.get("runtime") or {}).get("per_task") or {}).get("treatment") or {}
     a = ((after.get("runtime") or {}).get("per_task") or {}).get("treatment") or {}
     for task_id, row in sorted(a.items()):
-        old = (b.get(task_id) or {}).get("success_rate")
-        new = row.get("success_rate")
-        if isinstance(old, (int, float)) and isinstance(new, (int, float)) and new < old:
-            out.append((task_id, old, new))
+        for key, label in (("success_rate", task_id), ("process_rate", f"{task_id} (process)")):
+            old = (b.get(task_id) or {}).get(key)
+            new = row.get(key)
+            if isinstance(old, (int, float)) and isinstance(new, (int, float)) and new < old:
+                out.append((label, old, new))
     return out
 
 
