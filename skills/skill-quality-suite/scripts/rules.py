@@ -281,6 +281,40 @@ _ROWS = {
               "Make the two sides differ in topic words, not only in the negation - or move "
               "the exclusion into the body, which is read after the skill has been chosen.",
               False),
+    "QL016": ("info", "Procedure written as one block of prose",
+              "The body has no steps - no numbered item, no step heading - and one paragraph "
+              "of 200 words or more carries an order (`first`, `then`, `finally`). An agent "
+              "reading a procedure that way has to find the step boundaries itself, and a "
+              "step buried mid-sentence is the one it skips. The Stepless Workflow smell of "
+              "arXiv 2607.01456, which found it in 32% of 238 marketplace skills with a "
+              "model; this check sees only the extreme shape.",
+              "Split the paragraph at its steps, each one saying what it is for. Numbered or "
+              "bulleted both work. Keep each step a goal, not a fixed command line: the same "
+              "paper counts a rigid series of commands as a smell of its own (62%), so the "
+              "fix is structure, not a script.", False),
+    "QL017": ("info", "No example anywhere in the skill",
+              "Neither SKILL.md nor any reference gives an example: no `for example`, no "
+              "fenced block, no `bad` / `good` pair, no quoted wording. The agent works from "
+              "the description of a thing alone, and fills what it has not seen with a "
+              "guess. Missing Example in arXiv 2607.01456 (34% of 238 skills by a model).",
+              "Add one worked example of the input and what the skill makes of it - in "
+              "SKILL.md if it is short, in a reference the body links if it is long.", False),
+    "QL018": ("info", "Output produced, never checked",
+              "The body tells the agent to write, create, render or build something, and no "
+              "text in the skill mentions checking the result in any form - verify, test, "
+              "compare, review, a checklist. The output is treated as done the moment it "
+              "exists. No Validation Step in arXiv 2607.01456 (69% of 238 skills by a "
+              "model); this check fires only where checking is never mentioned at all.",
+              "Add the check that would catch this output being wrong - run it, render it "
+              "and look, compare it with the source - and what to do when it fails.", False),
+    "QL019": ("info", "Output format required, no template shown",
+              "A section is headed as the output or report format, or a sentence promises "
+              "\"the following format:\", and what follows is prose: no fenced block, table, "
+              "list of parts, sample or linked file. The agent invents a layout each run, "
+              "and two runs disagree. Missing Template in arXiv 2607.01456 (25% of 238 "
+              "skills by a model).",
+              "Put the template under the heading - a fenced skeleton with the parts filled "
+              "by placeholders - or link the file that holds it.", False),
 
     # ---- CP: agent compatibility --------------------------------------------
     "CP001": ("warning", "Field value the runtime cannot read",
@@ -680,6 +714,16 @@ GRADES = {
     # the invocation flag is read exactly; the wording is a pattern, kept narrow so that
     # "use when" - fine for a person too - never counts
     "QL015": ("medium", "low"),
+    # arXiv 2607.01456's smells, by pattern where the paper used a model. The shapes are
+    # read exactly; whether the shape is the smell is the judgement left over. QL016's
+    # paragraph length is a measured gap in 149 skills, not a published number. QL017 and
+    # QL018 report an absence, so an example or a check in a shape the vocabulary does not
+    # know (an italic sample reply, "watch the device log") reads as missing. QL018's
+    # vocabulary is also ordinary prose in a skill about checking, which can only silence it.
+    "QL016": ("medium", "medium"),
+    "QL017": ("medium", "medium"),
+    "QL018": ("low", "medium"),
+    "QL019": ("medium", "low"),     # a heading or a promise, and the block after it
 
     # compat: every verdict comes from an adapter's declared support table
     "CP001": ("high", "low"),    "CP002": ("high", "low"),

@@ -14,7 +14,7 @@ reports nothing, which is the failure this whole suite exists to prevent.
 import re
 import unicodedata
 
-from core import Finding, strip_code
+from core import Finding, line_of, strip_code
 
 # A description does two jobs: name the material, and list the branches that should
 # trigger reaching it. These are the words that do the second job.
@@ -135,6 +135,145 @@ UNPINNED_RE = re.compile(
     r"\b(npx|bunx|uvx)\s+(?:--?\S+\s+)*(@?[\w.-]+(?:/[\w.-]+)?)(?![\w./-]*@)")
 
 SCRIPT_EXT = (".py", ".sh", ".bash", ".ps1", ".js", ".ts", ".rb")
+
+# ---- skill smells from "From Anatomy to Smells" (arXiv 2607.01456) -----------------
+#
+# The paper names 26 smells and detects 21 of them with a model, these four among them.
+# What is here is the part a pattern can carry: each rule reads one structural shape the
+# smell's definition names, and stays quiet wherever telling the smell apart takes
+# reading the text for meaning. The paper also measured how often its model found each
+# one in 238 marketplace skills; the counts these rules give on a real tree are far
+# lower, and the gap is the difference between the two kinds of detector, not a defect.
+#
+# "Never Asks Human" (77% in the paper) was tried and withdrawn. A skill needs to ask
+# only where it does something a person must decide, so the test needed an action gate:
+# delete, push, publish, send. On the 44 installed skills it was calibrated against, all
+# six skills it fired on were false: `push-ins` (a camera move), a JavaScript array push,
+# deleting the skill's own scratch files, a routing map naming the commit skill, and a
+# README skill that does gate its pushes ("without explicit authorization") in words the
+# ask-vocabulary missed. The action words are the subject matter of those skills, and an
+# ungated version flags every read-only skill for not asking anyone. `SE002` keeps the
+# part that is decidable: a destructive command whose step should ask first.
+
+# A step structure: a numbered item, or a heading that names a step. A bulleted list is
+# not counted, because the smell is a workflow with no decomposition at all, and an
+# unordered list is how reference material is laid out as often as how steps are.
+NUMBERED_ITEM_RE = re.compile(r"^\s*\d+[.)]\s+\S", re.M)
+STEP_HEADING_RE = re.compile(r"^#{1,6}\s+(?:(?:step|phase|stage|шаг|этап)\b|\d+[.)]?\s)",
+                             re.I | re.M)
+# Where a paragraph stops: a blank line, a list item, a heading, a table row, a quote.
+# The marker needs the space after it - `**Setup.**` opens a paragraph, not a list item.
+BLOCK_START_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|#|\||>)")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s)")
+# An ordering word at the start of a clause - `form first` and `next to` are not one.
+SEQUENCE_RE = re.compile(
+    r"(?:^|[.;:!?]\s+|,\s+|—\s+|\(\s*)(?:first(?:ly)?,|then\b|next,|after that\b|"
+    r"afterwards\b|finally\b|once (?:that|this|it) is done\b|"
+    r"сначала\b|затем\b|потом\b|после этого\b|далее\b|наконец\b|в конце\b)",
+    re.I | re.M)
+QUOTED_ANY_RE = re.compile(r"«[^»\n]*»|\"[^\"\n]*\"|“[^”\n]*”")
+# One paragraph this long is the "single block" in the definition. Calibrated on 149
+# skills (the installed tree, ~/.claude/plugins, a plugin workspace): no paragraph in a
+# body without step structure ran between 115 and 221 words, and the one skill above
+# the gap is a whole procedure written as three paragraphs of 221-345 words.
+STEPLESS_WORDS = 200
+
+# An example in any of the shapes skills give one. Quoted wordings count too, at the
+# threshold `QL015` uses for a trigger list: `("n=3", "N=pq" and "AB=AC")` and an
+# italic sample reply are examples with no word announcing them.
+EXAMPLE_RE = re.compile(r"\b(?:examples?|e\.g\.|for instance|such as|"
+                        r"пример\w*|например|напр\.|скажем)|```|~~~|❌|✅|"
+                        r"\bbad\b.{0,40}\bgood\b|\bплохо\b.{0,40}\bхорошо\b",
+                        re.I | re.S)
+
+# Something the skill leaves behind, in the imperative an instruction is written in as
+# well as the third person a description uses. `cases.BODY_MAKE_RE` has only the second
+# for Russian, which is right for a description and misses every instruction.
+PRODUCE_RE = re.compile(
+    r"\b(?:write|writes|create|creates|save|saves|generate|generates|render|renders|"
+    r"produce|produces|build|builds|draft|drafts|export|exports|compose|composes|"
+    r"напиши|запиши|записывай|пишет|создай|создаёт|создает|сохрани|сохраняй|сохраняет|"
+    r"сгенерируй|сформируй|формирует|оформи|оформляет|собери|отрендери)\b", re.I)
+# Any sign of a check, read over the raw text so a `--check` flag or a `validate.py`
+# in a code span counts. Generous on purpose: this rule reports a skill that never
+# mentions checking at all, and every word here can only keep it quiet.
+VERIFY_RE = re.compile(
+    r"(?:verif|validat|check|confirm|compar|\btests?\b|testing|pytest|make sure|ensur|lint|"
+    r"assert|re-?run|review|inspect|провер|убед|свер|сравн|тест|валид|чек-?лист|"
+    r"самопровер)", re.I)
+
+# A section that names the output's format, and the sentence that promises one.
+FORMAT_HEADING_RE = re.compile(
+    r"^#{1,6}\s+.*\b(?:output format|response format|answer format|report format|"
+    r"output template|report template|формат (?:ответа|вывода|отчёта|отчета|результата)|"
+    r"шаблон (?:ответа|вывода|отчёта|отчета))", re.I | re.M)
+FOLLOWING_FORMAT_RE = re.compile(
+    r"\b(?:in|use|follow|with) (?:the |this )?following (?:format|structure|template|"
+    r"layout|sections|shape)\b[^\n]*:[ \t]*$|"
+    r"\b(?:в|по) (?:следующем|следующему|таком|такому) (?:формате|формату|шаблону|виде)"
+    r"\b[^\n]*:[ \t]*$", re.I | re.M)
+# What a template looks like on the page: a fence, a table, a list of the parts, a
+# quoted sample, markup. Or a link to the file that holds it.
+TEMPLATE_SHAPE_RE = re.compile(r"^\s*(?:```|~~~|\||[-*+]\s|\d+[.)]\s|>|<\w)", re.M)
+TEMPLATE_LINK_RE = re.compile(r"\]\([^)]+\)|`[^`\n]+\.(?:md|txt|json|ya?ml|html|xml|csv)`")
+
+
+def prose_paragraphs(prose):
+    """(first line, text) for each paragraph of running prose.
+
+    A list item takes its indented continuation lines with it, so a step that wraps is
+    still a step and not a paragraph."""
+    para, start, in_item = [], 0, False
+    for n, line in enumerate(prose.split("\n"), 1):
+        if not line.strip() or BLOCK_START_RE.match(line):
+            if para and not in_item:
+                yield start, " ".join(para)
+            para, in_item = [], bool(LIST_ITEM_RE.match(line))
+            continue
+        if in_item:
+            continue
+        if not para:
+            start = n
+        para.append(line.strip())
+    if para and not in_item:
+        yield start, " ".join(para)
+
+
+def stepless_block(body):
+    """(line, words) of the first long ordered paragraph in a body with no steps, or None."""
+    prose = strip_code(body)
+    if NUMBERED_ITEM_RE.search(prose) or STEP_HEADING_RE.search(prose):
+        return None
+    for line, para in prose_paragraphs(prose):
+        words = len(para.split())
+        if words >= STEPLESS_WORDS and SEQUENCE_RE.search(QUOTED_ANY_RE.sub(" ", para)):
+            return line, words
+    return None
+
+
+def has_example(texts):
+    """Whether any text of the skill gives an example in a shape a reader can see."""
+    for _, text in texts:
+        if EXAMPLE_RE.search(text) or len(QUOTED_RE.findall(strip_code(text))) >= QUOTED_MIN:
+            return True
+    return False
+
+
+def untemplated_formats(text):
+    """(line, what) for each output format the text demands and does not show."""
+    out = []
+    for m in FORMAT_HEADING_RE.finditer(text):
+        level = len(m.group(0)) - len(m.group(0).lstrip("#"))
+        rest = text[m.end():]
+        nxt = re.search(r"^#{1,%d}\s" % level, rest, re.M)
+        section = rest[:nxt.start()] if nxt else rest
+        if not TEMPLATE_SHAPE_RE.search(section) and not TEMPLATE_LINK_RE.search(section):
+            out.append((line_of(text, m.start()), m.group(0).strip("# \t")))
+    for m in FOLLOWING_FORMAT_RE.finditer(text):
+        block = text[m.end():].lstrip("\n").split("\n\n", 1)[0]
+        if not TEMPLATE_SHAPE_RE.match(block) and not TEMPLATE_LINK_RE.search(block):
+            out.append((line_of(text, m.start()), m.group(0).strip()))
+    return out
 
 WORD_RE = re.compile(r"[^\W\d_]{4,}", re.U)
 WORD_RE_LONG = re.compile(r"[^\W\d_]{6,}", re.U)
@@ -486,6 +625,32 @@ def check(skill, cfg=None, registry=None):
                                             f"the body - the description has drifted from what "
                                             f"the skill grew into", where="SKILL.md"))
 
+    # QL016 / QL017 / QL018 - the skill smells a pattern can carry; see the note above
+    # `NUMBERED_ITEM_RE`. QL016 reads SKILL.md alone, where the workflow is; the two
+    # absences read every text, because an example or a check moved into `references/`
+    # is the progressive disclosure the structure rules ask for, not a missing one.
+    head = line_of(skill.text, len(skill.text) - len(skill.body)) - 1
+    block = stepless_block(skill.body)
+    if block:
+        out.append(Finding("QL016", f"a {block[1]}-word paragraph carries an ordered "
+                                    f"procedure and the body has no steps", where="SKILL.md",
+                           line=head + block[0]))
+    # SKILL.md is read without its frontmatter: a skill named `example-*`, or one whose
+    # description says it fires "when the user asks to check X", has given no example and
+    # asked for no check.
+    texts = [("SKILL.md", skill.body)] + [t for t in skill.texts() if t[0] != "SKILL.md"]
+    if skill.body.strip() and not has_example(texts):
+        out.append(Finding("QL017", "no example anywhere in the skill - no sample, no "
+                                    "fenced block, no quoted wording", where="SKILL.md"))
+    # Quoted wordings are blanked too: "Fixed: export no longer drops a row" is a sample
+    # line, and its verb is not something the skill tells the agent to do.
+    body_prose = QUOTED_ANY_RE.sub(lambda q: " " * len(q.group(0)), strip_code(skill.body))
+    m = PRODUCE_RE.search(body_prose)
+    if m and not any(VERIFY_RE.search(t) for _, t in texts):
+        out.append(Finding("QL018", f'"{m.group(0)}" - the skill produces something and '
+                                    f'nothing in it says to check the result',
+                           where="SKILL.md", line=head + line_of(body_prose, m.start())))
+
     # The prose checks. Fenced blocks are blanked first: a `rm -rf` inside a
     # `bad -> good` pair is teaching material, not an instruction.
     for rel, text in skill.texts():
@@ -510,6 +675,13 @@ def check(skill, cfg=None, registry=None):
                                         f"{', '.join(map(str, first))}, ...) - check which of "
                                         f"them have a positive form",
                                where=rel, line=first[0]))
+
+        # QL019 - a format the output must take, named and never shown. Raw text: the
+        # template is usually the fenced block that strip_code would blank.
+        for line, what in untemplated_formats(text)[:2]:
+            out.append(Finding("QL019", f'"{what[:60]}" - the format is required and no '
+                                        f'template, sample or linked file shows it',
+                               where=rel, line=line))
 
         # QL012 - an unpinned one-off command. It lives inside a fence, so the raw text
         # is searched: blanking code here would blank the thing being checked.

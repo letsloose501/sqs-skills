@@ -64,7 +64,7 @@ is created.
 
 ## 3. Does it read like an instruction
 
-A skill can be perfectly valid and still be a bad skill. These rules (`QL001`-`QL015`)
+A skill can be perfectly valid and still be a bad skill. These rules (`QL001`-`QL019`)
 are heuristics, and each one names a file and a line so you can judge it:
 
 - `QL002` - the description says *what* the skill is and never *when* to reach for it.
@@ -80,6 +80,18 @@ are heuristics, and each one names a file and a line so you can judge it:
   no reader. `use when` alone does not count - it reads fine to a person too.
 - `QL011` - a bundled script that waits for input. Agents run in non-interactive shells,
   so it hangs until something kills it.
+- `QL016`-`QL019` - four of the skill smells catalogued in "From Anatomy to Smells"
+  (arXiv 2607.01456): a procedure written as one long paragraph in a body with no steps,
+  no example anywhere, output produced and never checked, and an output format named
+  but never shown. The paper detects these with a model; these rules carry only the
+  shape a pattern can read, so they fire far less often than the paper's prevalence
+  figures (on 126 real skills: once, three times, once, never). QL016 does not ask for
+  numbered steps in general - the same paper counts a rigid series of commands as a
+  smell too - only for a procedure that has no structure at all. The paper's "Never
+  Asks Human" was tried and withdrawn: on the installed tree it was calibrated against,
+  every skill it fired on was a false positive, because the actions that call for
+  asking (push, delete, publish) are also the subject matter of skills that never need
+  to ask. `SE002` keeps the decidable part, a destructive command whose step should ask.
 
 Each rule carries a **detection confidence** and a **false-positive risk**, printed by
 `sqs.py explain <CODE>`. `--min-confidence high` keeps the filesystem and parse facts

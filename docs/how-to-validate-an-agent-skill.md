@@ -180,4 +180,4 @@ nothing else notices.
 
 - [Skill validation reference](skill-validation.md) - the same material as a reference
 - [How to secure Agent Skills](how-to-secure-agent-skills.md)
-- [All 100 rules](quality-rules.md)
+- [All 106 rules](quality-rules.md)

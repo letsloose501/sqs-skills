@@ -12,7 +12,7 @@ python scripts/sqs.py fix ./my-skill --apply  # the repairs with one right answe
 
 ## A skill with nothing wrong with it
 
-The negative case for all 102 rules at once. Any finding here would be a false positive, which is why the corpus asserts this one reports **nothing at all**.
+The negative case for all 106 rules at once. Any finding here would be a false positive, which is why the corpus asserts this one reports **nothing at all**.
 
 ```markdown
 ---
@@ -25,7 +25,9 @@ description: Files a raw meeting transcript as a dated note. Use when a transcri
 1. Read the transcript and list every decision it records. Stop when each decision
    carries an owner and a date.
 2. Write the note in the order [the house layout](references/layout.md) gives.
-3. File it under the folder that layout names, then print the path you wrote.
+3. Check the note against the list from step 1: every decision is in it, with its
+   owner. A missing one goes back in before the note is filed.
+4. File it under the folder that layout names, then print the path you wrote.
 
 ## When to open which reference
 
@@ -63,17 +65,23 @@ Install the linter with `npx eslint` before you start.
 $ sqs.py check tests/fixtures/quality-prose
 ⛔ blocking-script
      ⛔ QL011 `input(` waits for a human (scripts/import.py:10)
+     ·  QL017 no example anywhere in the skill - no sample, no fenced block, no quoted wording (SKILL.md)
+     ·  QL018 "export" - the skill produces something and nothing in it says to check the result (SKILL.md:8)
 ⚠️ self-talking
      ⚠️  QL010 "This skill" - a description is read as an instruction about when to act, not as a paragraph about the skill (SKILL.md)
+     ·  QL017 no example anywhere in the skill - no sample, no fenced block, no quoted wording (SKILL.md)
+     ·  QL018 "Write" - the skill produces something and nothing in it says to check the result (SKILL.md:9)
 ⚠️ vague-steps
      ⚠️  QL007 placeholder at line 10 (SKILL.md:10)
      ·  QL004 17% of the description's words appear in the body - the description has drifted from what the skill grew into (SKILL.md)
      ·  QL006 be thorough, where appropriate - lines 8, 9 (SKILL.md:8)
      ·  QL012 `npx eslint` has no version (SKILL.md:12)
+     ·  QL017 no example anywhere in the skill - no sample, no fenced block, no quoted wording (SKILL.md)
 ⚠️ what-not-when
      ⚠️  QL002 description says what the skill is and never when to reach for it (SKILL.md)
+     ·  QL017 no example anywhere in the skill - no sample, no fenced block, no quoted wording (SKILL.md)
 
-4 skill(s) · 1 error · 3 warning · 3 info  ·  `sqs.py explain <CODE>` for any of them
+4 skill(s) · 1 error · 3 warning · 9 info  ·  `sqs.py explain <CODE>` for any of them
 ```
 
 Each code carries its reasoning:
@@ -136,7 +144,7 @@ The file itself is [`tests/fixtures/malicious/`](../tests/fixtures/malicious). I
 $ sqs.py check tests/fixtures/quality-prose --format board
 STRUCTURE       PASS      does every pointer still resolve
 SPEC            PASS      will a strict loader take it
-QUALITY         FAIL      1 error · 3 warning · 3 info
+QUALITY         FAIL      1 error · 3 warning · 9 info
 SECURITY        PASS      what can it do to the machine that loads it
 COMPATIBILITY   PASS      will it work anywhere but here
 EVALS           NOT RUN   is there anything that would notice a regression

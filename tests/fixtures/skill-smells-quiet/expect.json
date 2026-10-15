@@ -1,0 +1,9 @@
+{
+  "note": "The near misses of the four arXiv 2607.01456 smells, each built to share the surface its rule reads and lack the shape it reports: the same ordered restore paragraph in a body that also numbers its steps; a 250-word paragraph with no order in it; examples given only as quoted wordings; a check that lives in a reference as a `--check` flag; a skill that answers and produces nothing, whose only production verb sits in a quoted sample; an example that lives only in a reference; an output-format heading with a fenced skeleton under it, another that links the file holding its skeleton, and a \"following format:\" promise kept by a list.",
+  "reject": [
+    "QL016",
+    "QL017",
+    "QL018",
+    "QL019"
+  ]
+}

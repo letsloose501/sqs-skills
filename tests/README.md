@@ -55,6 +55,7 @@ a subprocess with `--format json`, and compares the rule codes that came back.
 | `structure-links`, `link-shapes`, `sibling-link` | every shape of broken pointer: a file that is not there, a heading that moved, a neighbour's file, a skill that does not exist, an outbound path into a vault that is gone |
 | `environment-paths` | a missing path into a tool's own folder (ST017, a warning) next to a missing path into the user's files (ST011) |
 | `code-as-prose` | a program pasted into the text, and a skill that activates and says nothing |
+| `skill-smells`, `skill-smells-quiet` | four smells from arXiv 2607.01456 (a procedure as one paragraph, no example, output never checked, a format never shown), and the near miss of each |
 | `duplicate-name` | two folders claiming one `name` |
 | `large-skill` | budgets and asset weight, generated at run time |
 | `malicious` | every security rule at once, in the shape they arrive in: a skill that reads as helpful |

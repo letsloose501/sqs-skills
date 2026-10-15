@@ -11,7 +11,7 @@ description: >-
 
 # Quality rules
 
-Every finding the suite can emit, all 102 of them, rendered from `scripts/rules.py`.
+Every finding the suite can emit, all 106 of them, rendered from `scripts/rules.py`.
 
 `sqs.py explain <CODE>` prints the same reasoning at the terminal, and `sqs.py rules --module security` lists one module.
 
@@ -372,6 +372,10 @@ Whether the instructions read like instructions. The module with the most room t
 | `QL013` | info | medium | medium | no | Description rules out a topic |
 | `QL014` | warning | medium | medium | no | Fuzzy boundary between fire and do-not-fire |
 | `QL015` | warning | medium | low | no | User-invoked skill's description is written for the router |
+| `QL016` | info | medium | medium | no | Procedure written as one block of prose |
+| `QL017` | info | medium | medium | no | No example anywhere in the skill |
+| `QL018` | info | low | medium | no | Output produced, never checked |
+| `QL019` | info | medium | low | no | Output format required, no template shown |
 
 ### QL001 - Description too short to carry triggers
 
@@ -462,6 +466,30 @@ Whether the instructions read like instructions. The module with the most room t
 **Why it matters.** With `disable-model-invocation: true` the description is not in the model's context at all. Trigger wordings, orders to fire or not to fire, and the user spoken of in the third person are addressed to a reader who never sees them - and they take the place of the one thing the remaining reader needs: what the command does when you run it.
 
 **Fix.** Rewrite the description as a one-line menu entry for a person. Keep the routing boundary, if it matters, in the body.
+
+### QL016 - Procedure written as one block of prose
+
+**Why it matters.** The body has no steps - no numbered item, no step heading - and one paragraph of 200 words or more carries an order (`first`, `then`, `finally`). An agent reading a procedure that way has to find the step boundaries itself, and a step buried mid-sentence is the one it skips. The Stepless Workflow smell of arXiv 2607.01456, which found it in 32% of 238 marketplace skills with a model; this check sees only the extreme shape.
+
+**Fix.** Split the paragraph at its steps, each one saying what it is for. Numbered or bulleted both work. Keep each step a goal, not a fixed command line: the same paper counts a rigid series of commands as a smell of its own (62%), so the fix is structure, not a script.
+
+### QL017 - No example anywhere in the skill
+
+**Why it matters.** Neither SKILL.md nor any reference gives an example: no `for example`, no fenced block, no `bad` / `good` pair, no quoted wording. The agent works from the description of a thing alone, and fills what it has not seen with a guess. Missing Example in arXiv 2607.01456 (34% of 238 skills by a model).
+
+**Fix.** Add one worked example of the input and what the skill makes of it - in SKILL.md if it is short, in a reference the body links if it is long.
+
+### QL018 - Output produced, never checked
+
+**Why it matters.** The body tells the agent to write, create, render or build something, and no text in the skill mentions checking the result in any form - verify, test, compare, review, a checklist. The output is treated as done the moment it exists. No Validation Step in arXiv 2607.01456 (69% of 238 skills by a model); this check fires only where checking is never mentioned at all.
+
+**Fix.** Add the check that would catch this output being wrong - run it, render it and look, compare it with the source - and what to do when it fails.
+
+### QL019 - Output format required, no template shown
+
+**Why it matters.** A section is headed as the output or report format, or a sentence promises "the following format:", and what follows is prose: no fenced block, table, list of parts, sample or linked file. The agent invents a layout each run, and two runs disagree. Missing Template in arXiv 2607.01456 (25% of 238 skills by a model).
+
+**Fix.** Put the template under the heading - a fenced skeleton with the parts filled by placeholders - or link the file that holds it.
 
 ## security (SExxx)
 

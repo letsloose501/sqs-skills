@@ -8,7 +8,9 @@ description: Files a raw meeting transcript as a dated note. Use when a transcri
 1. Read the transcript and list every decision it records. Stop when each decision
    carries an owner and a date.
 2. Write the note in the order [the house layout](references/layout.md) gives.
-3. File it under the folder that layout names, then print the path you wrote.
+3. Check the note against the list from step 1: every decision is in it, with its
+   owner. A missing one goes back in before the note is filed.
+4. File it under the folder that layout names, then print the path you wrote.
 
 ## When to open which reference
 

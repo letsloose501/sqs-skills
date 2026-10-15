@@ -16,7 +16,7 @@ dangerous scripts before you trust it, checks whether it works on ten other agen
 measures whether it improves the agent's work at all.
 
 For Claude Code, OpenAI Codex, Cursor, Gemini CLI, Antigravity, OpenCode, Cline, Roo
-Code, Windsurf and GitHub Copilot. 102 coded rules, each one watched firing on a test
+Code, Windsurf and GitHub Copilot. 106 coded rules, each one watched firing on a test
 case. Python standard library only; the static half is offline and deterministic.
 
 ```bash
@@ -103,7 +103,7 @@ into the pass so you see whether an edit stole their requests.
 
 📖 **[Documentation](https://letsloose501.github.io/sqs-skills/)** ·
 🧪 **[Worked examples with real output](examples/)** ·
-📋 **[All 102 rules](docs/quality-rules.md)**
+📋 **[All 106 rules](docs/quality-rules.md)**
 
 ## Why
 

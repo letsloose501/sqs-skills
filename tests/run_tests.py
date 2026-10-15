@@ -370,6 +370,7 @@ def unit_checks():
     out += environment_checks()
     out += adapter_checks()
     out += interactive_checks()
+    out += template_checks()
     out += body_syntax_checks()
     import security
     for text, want in (
@@ -863,6 +864,31 @@ def ranking_checks():
             if bool(got) != fires:
                 out.append(f"SE007 ranking on {desc!r}: expected "
                            f"{'a finding' if fires else 'silence'}, got {[x.msg for x in got]}")
+    return out
+
+
+def template_checks():
+    """QL019's two shapes, each on its own.
+
+    The `skill-smells` case carries both, and a case can only say that a code came back,
+    so either shape could stop matching while the other kept the case green. Watched
+    surviving a mutation run that way before these rows existed.
+    """
+    import quality
+    nl = chr(10)
+    rows = [
+        ("## Output format" + nl + nl + "A title, then the cause, then the fix.", 1),
+        ("## Output format" + nl + nl + "```" + nl + "# <title>" + nl + "```", 0),
+        ("## Report format" + nl + nl + "The skeleton is [status.md](assets/status.md).", 0),
+        ("Write it in the following format:" + nl + nl + "the time, then who, then what.", 1),
+        ("Write it in the following format:" + nl + nl + "- the time" + nl + "- who", 0),
+        ("Пиши в следующем формате:" + nl + nl + "время, потом кто, потом что.", 1),
+    ]
+    out = []
+    for text, want in rows:
+        got = len(quality.untemplated_formats(text))
+        if got != want:
+            out.append(f"QL019 on {text!r}: {got} finding(s), expected {want}")
     return out
 
 

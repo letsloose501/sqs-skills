@@ -1,0 +1,9 @@
+{
+  "note": "The four skill smells from arXiv 2607.01456 that a pattern can carry, one skill each: a whole restore procedure written as one 205-word paragraph in a body with no steps (QL016), naming advice with no example of a name anywhere (QL017), release notes written to a file that nothing says to check (QL018), and a post-mortem whose output format is a heading followed by prose, plus a reference that promises \"the following format:\" and then describes it (QL019, both shapes).",
+  "expect": [
+    "QL016",
+    "QL017",
+    "QL018",
+    "QL019"
+  ]
+}
