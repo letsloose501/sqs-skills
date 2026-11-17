@@ -172,6 +172,9 @@ deciding which of them are guardrails is this pass.
   also grades leading words: a word too weak to beat the default (`be thorough`, when
   the agent is already thorough-ish) is a no-op, and the fix is a stronger word, not a
   different technique.
+  "Settled by running" means a **mirror**: a subagent that never saw the skill writes the
+  procedure for the same task, and only the lines it states unprompted are cut. Prompt and
+  the three-column comparison: [clean-context-run.md](clean-context-run.md).
 
 ## 7. How the skill was built
 
@@ -199,6 +202,9 @@ These four decide whether the skill keeps working, and no script sees any of the
 
 An edit is finished when you can name what it fixes: today's case **and at least one
 older one**. If it only fixes today's, it is a patch, not a rule - go back to section 7.
+Replay the older case in a **subagent** with the edited skill and the case's input, never
+inline: the session that wrote the fix already knows the answer. Prompt and what counts as
+fixed: [clean-context-run.md](clean-context-run.md).
 
 Before starting, search the history for the same trap: it may already have been analysed
 once, and the second analysis will disagree with the first.
